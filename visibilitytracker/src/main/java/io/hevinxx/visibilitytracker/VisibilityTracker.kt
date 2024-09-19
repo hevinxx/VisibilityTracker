@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -62,6 +63,22 @@ fun VisibilityTracker(
     treatOnStopAsInvisible: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    Box(
+        modifier = Modifier.onVisibilityChanged(
+            threshold = threshold,
+            onVisibilityChanged = onVisibilityChanged,
+            treatOnStopAsInvisible = treatOnStopAsInvisible
+        )
+    ) {
+        content()
+    }
+}
+
+fun Modifier.onVisibilityChanged(
+    threshold: Float = 0.5f,
+    onVisibilityChanged: (Boolean) -> Unit,
+    treatOnStopAsInvisible: Boolean = true,
+): Modifier = composed {
     var contentBounds by remember {
         mutableStateOf(Rect(-1f, -1f, -1f, -1f))
     }
@@ -71,35 +88,26 @@ fun VisibilityTracker(
     var isStarted by remember {
         mutableStateOf(false)
     }
-    val visibleRatio by remember {
-        derivedStateOf {
-            if (treatOnStopAsInvisible && !isStarted) {
-                0f
-            } else if (contentBounds.isEmpty) {
-                0f
-            } else {
-                (givenArea.width * givenArea.height) / (contentBounds.width * contentBounds.height)
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier.onGloballyPositioned { layoutCoordinates ->
-            contentBounds = layoutCoordinates.toRect()
-            var intersection = contentBounds
-            var node = layoutCoordinates
-            while (node.parentLayoutCoordinates != null) {
-                node = node.parentLayoutCoordinates!!
-                intersection = intersection.intersect(node.toRect())
-            }
-            givenArea = intersection
-        }
-    ) {
-        content()
-    }
+    var visibleRatio by remember { mutableFloatStateOf(0f) }
 
     var lastVisibleRatio by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(key1 = visibleRatio) {
+
+    LaunchedEffect(
+        treatOnStopAsInvisible,
+        isStarted,
+        contentBounds,
+        givenArea
+    ) {
+        visibleRatio = if (treatOnStopAsInvisible && !isStarted) {
+            0f
+        } else if (contentBounds.isEmpty) {
+            0f
+        } else {
+            (givenArea.width * givenArea.height) / (contentBounds.width * contentBounds.height)
+        }
+    }
+
+    LaunchedEffect(visibleRatio) {
         val wasAbove = lastVisibleRatio >= threshold
         val isAbove = visibleRatio >= threshold
         if (wasAbove != isAbove) {
@@ -125,5 +133,16 @@ fun VisibilityTracker(
                 lifecycleOwner.lifecycle.removeObserver(observer)
             }
         }
+    }
+
+    this.onGloballyPositioned { layoutCoordinates ->
+        contentBounds = layoutCoordinates.toRect()
+        var intersection = contentBounds
+        var node = layoutCoordinates
+        while (node.parentLayoutCoordinates != null) {
+            node = node.parentLayoutCoordinates!!
+            intersection = intersection.intersect(node.toRect())
+        }
+        givenArea = intersection
     }
 }
