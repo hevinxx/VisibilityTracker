@@ -88,21 +88,26 @@ fun Modifier.onVisibilityChanged(
     var isStarted by remember {
         mutableStateOf(false)
     }
-    val visibleRatio by remember {
-        derivedStateOf {
-            if (treatOnStopAsInvisible && !isStarted) {
-                0f
-            } else if (contentBounds.isEmpty) {
-                0f
-            } else {
-                (givenArea.width * givenArea.height) / (contentBounds.width * contentBounds.height)
-            }
-        }
-    }
+    var visibleRatio by remember { mutableFloatStateOf(0f) }
 
     var lastVisibleRatio by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(key1 = visibleRatio) {
+    LaunchedEffect(
+        treatOnStopAsInvisible,
+        isStarted,
+        contentBounds,
+        givenArea
+    ) {
+        visibleRatio = if (treatOnStopAsInvisible && !isStarted) {
+            0f
+        } else if (contentBounds.isEmpty) {
+            0f
+        } else {
+            (givenArea.width * givenArea.height) / (contentBounds.width * contentBounds.height)
+        }
+    }
+
+    LaunchedEffect(visibleRatio) {
         val wasAbove = lastVisibleRatio >= threshold
         val isAbove = visibleRatio >= threshold
         if (wasAbove != isAbove) {
